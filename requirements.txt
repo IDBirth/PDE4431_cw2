@@ -1,0 +1,4 @@
+numpy<2
+matplotlib==3.10.8
+roboticstoolbox-python==1.1.1
+spatialmath-python==1.1.15
