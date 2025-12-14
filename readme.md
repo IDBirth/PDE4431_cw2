@@ -57,6 +57,10 @@ DH parameters:
 So the homogeneous transform up to the forearm frame (frame 4) is:
 
 T₀⁴ = T₀¹ · T₁² · T₂³ · T₃⁴
+
+![Robot Image](/home/ubu/PDE4431_cw2/images/Robot.png)
+
+
 ## Task layout in simulation
 
 - Table-as-floor: center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m, height `0.22` m; 
