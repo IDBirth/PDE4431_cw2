@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from robot import RTSS5Robot
-from ik_solver import NumericalIKSolver
+from PDE4431_CW2.robot import RTSS5Robot
+from PDE4431_CW2.ik_solver import NumericalIKSolver
 
 
 
@@ -21,7 +21,7 @@ class ShelfStackingSimulation:
         # IK configuration
         # -------------------------------------------------
         # Toggle this flag to switch between analytic and numerical IK
-        self.use_numerical_ik = False   # set True to use NumericalIKSolver
+        self.use_numerical_ik = True   # set True to use NumericalIKSolver
 
         if self.use_numerical_ik:
             self.ik_solver = NumericalIKSolver(
@@ -42,7 +42,7 @@ class ShelfStackingSimulation:
         #Size of table:
         self.table_width = 0.4   # along X
         self.table_depth = 0.4   # along Y
-        self.table_height = 0.22  # along Z
+        self.table_height = 0.10  # along Z
 
         # -------------------------------------------------
         # Task geometry
@@ -62,23 +62,61 @@ class ShelfStackingSimulation:
             np.array([table_x0 + dx, table_y0, self.z_floor]),
         ]
 
-        # Shelves: unchanged (still at radius R_shelf in front)
-        self.z_shelves = [0.30, 0.55, 0.80]
+        # -------------------------------------------------
+        # Shelves: 3 target locations in front of robot
+        # -------------------------------------------------
+        self.z_shelves = [0.30, 0.55, 0.80]   # heights of each shelf
         self.shelf_positions = []
-        for i in range(3):
-            angle = self.theta_base  # aligned shelves
+        self.shelf_poly_verts = []
+        self.shelf_polys = []
+
+        shelf_width = 0.35      # along X
+        shelf_depth = 0.20      # along Y
+        shelf_thickness = 0.02  # vertical thickness
+
+        for i, z_shelf in enumerate(self.z_shelves):
+            angle = self.theta_base
             x = self.R_shelf * np.cos(angle)
             y = self.R_shelf * np.sin(angle)
-            z = self.z_shelves[i]
-            self.shelf_positions.append(np.array([x, y, z]))
+            pos = np.array([x, y, z_shelf])
+            self.shelf_positions.append(pos)
 
-        # Object states: position + flags
+            # --- graphical shelf as a thin rectangular platform ---
+            x0, y0, z0 = pos
+            half_w = shelf_width / 2.0
+            half_d = shelf_depth / 2.0
+
+            z_bottom = z0 - shelf_thickness
+            z_top = z0
+
+            p0 = [x0 - half_w, y0 - half_d, z_bottom]
+            p1 = [x0 + half_w, y0 - half_d, z_bottom]
+            p2 = [x0 + half_w, y0 + half_d, z_bottom]
+            p3 = [x0 - half_w, y0 + half_d, z_bottom]
+
+            p4 = [x0 - half_w, y0 - half_d, z_top]
+            p5 = [x0 + half_w, y0 - half_d, z_top]
+            p6 = [x0 + half_w, y0 + half_d, z_top]
+            p7 = [x0 - half_w, y0 + half_d, z_top]
+
+            verts = [
+                [p0, p1, p2, p3],  # bottom
+                [p4, p5, p6, p7],  # top
+                [p0, p1, p5, p4],
+                [p1, p2, p6, p5],
+                [p2, p3, p7, p6],
+                [p3, p0, p4, p7],
+            ]
+
+            self.shelf_poly_verts.append(verts)
+
         self.objects = []
         for i in range(3):
             self.objects.append({
                 "pos": self.floor_positions[i].copy(),
                 "attached": False,
                 "done": False,
+                "target": self.shelf_positions[i].copy(),  # one shelf per object
             })
 
         # Robot initial joint configuration (home)
@@ -168,6 +206,25 @@ class ShelfStackingSimulation:
         self.table = Poly3DCollection(table_verts, alpha=0.4, edgecolor="k")
         self.table.set_facecolor((0.7, 0.7, 0.7))
         self.ax.add_collection3d(self.table)
+
+        # Draw shelves and targets now that ax exists
+        for verts in self.shelf_poly_verts:
+            shelf_poly = Poly3DCollection(verts, alpha=0.6, edgecolor="k")
+            shelf_poly.set_facecolor((0.85, 0.85, 0.85))
+            self.ax.add_collection3d(shelf_poly)
+            self.shelf_polys.append(shelf_poly)
+
+        # Mark the exact target positions on the shelves (one per shelf)
+        self.target_markers = []
+        for i, pos in enumerate(self.shelf_positions):
+            (marker,) = self.ax.plot(
+                [pos[0]], [pos[1]], [pos[2]],
+                marker="*", markersize=8,
+                color="orange",
+                linestyle="None",
+                label="Shelf target" if i == 0 else None,
+            )
+            self.target_markers.append(marker)
 
         #add legend
         self.ax.legend(loc="upper left")
@@ -351,7 +408,7 @@ class ShelfStackingSimulation:
         floor_positions[idx] -> shelf_positions[idx]
         """
         floor_pos = self.floor_positions[idx]
-        shelf_pos = self.shelf_positions[idx]
+        shelf_pos = self.objects[idx]["target"]
 
         # Pre-pick: move above floor target (or table target)
         pre_pick = floor_pos.copy()

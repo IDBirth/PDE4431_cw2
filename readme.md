@@ -1,92 +1,71 @@
-# RTSS-4 Shelf Stacking Manipulator (PDE4431 CW2)
+# RTSS-5 Shelf Stacking Manipulator (PDE4431 CW2)
 
-This project implements a 4-DOF **R–P–P–R** cylindrical robot, the **RTSS-4
-(Rotating Telescopic Shelf-Stacker)**, entirely in Python. The manipulator
-is modelled using Denavit–Hartenberg style kinematics and simulates a
-pick-and-place task: moving three objects from the floor onto three
-shelves at different heights.
+Python implementation of the **RTSS-5** (Rotating Telescopic Shelf-Stacker), a
+5-DOF **R–P–R–R–R** arm that stacks three objects from a tabletop onto three
+front shelves. The project includes analytic IK, an optional numerical IK
+solver, and a Matplotlib-based simulator with simple controls.
 
-## 1. Robot Description
+## Contents
 
-- 4 DOF, including **two prismatic** joints:
-  - q1: base yaw (revolute about global Z)
-  - q2: vertical lift (prismatic along Z)
-  - q3: horizontal telescopic extension (prismatic along arm X)
-  - q4: wrist yaw (revolute about local Z)
+- `PDE4431_CW2/robot.py` — RTSS-5 model, FK, analytic position IK, limit checks,
+  workspace sampler.
+- `PDE4431_CW2/simulation.py` — pick-and-place simulation, GUI controls,
+  optional numerical IK, visual debugging overlays, shelf/table geometry.
+- `PDE4431_CW2/ik_solver.py` — generic damped-least-squares IK helper
+  (finite-difference Jacobian; position-only by default).
+- `PDE4431_CW2/main.py` — entrypoint to launch the simulator.
+- `rtss5_ik_validation.py` — compares analytic IK vs. numerical IK on random
+  targets.
+- `requirements.txt` — pinned dependencies (NumPy <2 to avoid ABI issues).
 
-- Geometric parameters:
-  - Base height above floor: `h0 = 0.20 m`
-  - Fixed radial offset to telescopic stage: `r0 = 0.30 m`
-  - Tool length: `L_tool = 0.10 m`
+## Robot model (RTSS-5)
 
-### DH-style Parameters
+- Joints: `q1` base yaw (R), `q2` vertical lift (P), `q3` shoulder (R),
+  `q4` elbow (R), `q5` wrist pitch (R).
+- Geometry (m): base offset `h0=0.20`, upper arm `L1=0.35`, forearm `L2=0.30`,
+  tool `L_tool=0.10` (used in IK as `L2_eff = L2 + L_tool`).
+- Analytic IK (position-only): yaw from `atan2(y,x)`, z via `q2`, planar 2R IK
+  for `(q3,q4)`, simple `q5` (zero or to track desired yaw). Limit checks and
+  FK validation ensure feasibility.
+- Numerical IK: toggle in `simulation.py` with `self.use_numerical_ik = True`
+  to use the damped-least-squares solver (`ik_solver.NumericalIKSolver`) with
+  position-only task space.
 
-The robot can be described with the following DH table (standard DH,
-with a mixture of d- and a-type joint variables):
+## Task layout
 
-| i | Type | aᵢ               | αᵢ | dᵢ        | θᵢ      |
-|---|------|------------------|----|-----------|---------|
-| 1 | R    | 0                | 0  | h0        | q1      |
-| 2 | P    | 0                | 0  | q2        | 0       |
-| 3 | P    | r0 + q3          | 0  | 0         | 0       |
-| 4 | R    | L_tool           | 0  | 0         | q4      |
+- Table (acts as floor): center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m,
+  height `0.22` m. Three objects are placed along X on the tabletop.
+- Shelves: radius `0.70` m at `θ=30°`; heights `[0.30, 0.55, 0.80]` m. Each
+  shelf is drawn as a thin platform and has a star marker target; objects carry
+  a `target` pointing to their shelf.
 
-Forward kinematics in the code is implemented via homogeneous transforms
-using these parameters.
+## Simulator features
 
-## 2. Inverse Kinematics
+- Buttons: **Run full sequence** (pick & place all three), **Show workspace**
+  (scatter sampled FK points), **Reset** (home pose and reset objects).
+- IK debug overlays: goal vs. FK(q) and error norm update after each IK call.
+- EE trail, object markers, shelf/table geometry drawn in 3D.
+- Pick/place steps: pre-pick → pick → lift → pre-place → place → exit →
+  home; objects attach/detach to EE accordingly.
 
-Analytical IK is implemented for position:
-
-Given target (x, y, z),
-
-1. Base yaw:
-   - q1 = atan2(y, x)
-
-2. Radial distance:
-   - r = sqrt(x² + y²)
-
-3. Telescopic extension:
-   - r = r0 + q3 + L_tool  ⇒  q3 = r − r0 − L_tool
-
-4. Vertical lift:
-   - z = h0 + q2  ⇒  q2 = z − h0
-
-5. Wrist yaw:
-   - q4 is chosen as 0, or adjusted to track a desired global yaw.
-
-Joint limits are enforced and each IK solution is validated by FK
-(position error check).
-
-## 3. Task and Simulation
-
-- Three floor targets:
-  - Radius R = 0.70 m, small angle offsets around 30°
-  - Height z = 0.05 m (near floor)
-- Three shelf targets:
-  - Same radius, angle 30°
-  - Heights z = [0.30, 0.55, 0.80] m
-
-The simulation performs:
-
-- Pre-pick (above floor target)
-- Pick (down to floor target)
-- Pre-place (above shelf)
-- Place (down to shelf)
-- Return to home
-
-The script animates the robot, the end-effector path, and the objects
-moving from floor to shelves.
-
-## 4. Running the Code
-
-Requirements:
-
-- Python 3.8+
-- `numpy`
-- `matplotlib`
-
-Install:
+## Setup & run
 
 ```bash
-pip install numpy matplotlib
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python PDE4431_CW2/main.py
+```
+
+> Note: NumPy is pinned to `<2` because some modules are not yet built against
+> NumPy 2.x. If you see ABI errors, ensure the pinned version is installed.
+
+## IK validation script
+
+```bash
+source .venv/bin/activate
+python rtss5_ik_validation.py
+```
+
+This reports analytic vs. numerical IK solutions and their FK errors for random
+targets.

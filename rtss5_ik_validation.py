@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from robot import RTSS5Robot
-from ik_solver import NumericalIKSolver
+from PDE4431_CW2.robot import RTSS5Robot
+from PDE4431_CW2.ik_solver import NumericalIKSolver
 
 
 def validate_rtss5_single_target(target_pos: np.ndarray):
