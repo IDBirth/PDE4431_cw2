@@ -109,11 +109,9 @@ python rtss5_ik_validation.py
 Reports analytic and numerical IK solutions plus FK error norms for random
 targets.
 
-## Video link (per brief)
+## Video link
 
 https://youtu.be/gmwFt7yIo8s
-<video src="images/video.mp4" controls width="100%"></video>
-![Robot Image](/images/video.mp4)
 
 ## Submission notes
 
