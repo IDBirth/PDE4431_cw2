@@ -36,7 +36,7 @@ def transl(x: float, y: float, z: float) -> np.ndarray:
 
 class RTSS5Robot:
     """
-    RTSS-5: Rotating Telescopic Shelf-Stacker, 5-DOF R–P–R–R–R arm.
+    RTSS-5: Rotating Telescopic Shelf-Stacker, 5-DOF R-P-R-R-R arm.
 
     Joints:
         q1: base yaw         (R, about global Z)

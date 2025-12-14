@@ -111,7 +111,7 @@ targets.
 
 ## Video link (per brief)
 
-- YouTube demo (with commentary): **<add link here>**
+- YouTube demo (with commentary): **<[add link here](https://youtu.be/gmwFt7yIo8s)>**
 
 ## Submission notes
 
