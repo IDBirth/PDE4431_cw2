@@ -59,7 +59,7 @@ So the homogeneous transform up to the forearm frame (frame 4) is:
 
 T₀⁴ = T₀¹ · T₁² · T₂³ · T₃⁴
 
-![Robot Image](/home/ubu/PDE4431_cw2/images/Robot.png)
+![Robot Image](/images/Robot.png)
 
 
 ## Task layout in simulation
