@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from robot import RTSS5Robot
+from ik_solver import NumericalIKSolver
 
 
 
@@ -15,6 +16,24 @@ class ShelfStackingSimulation:
 
     def __init__(self):
         self.robot = RTSS5Robot()
+
+        # -------------------------------------------------
+        # IK configuration
+        # -------------------------------------------------
+        # Toggle this flag to switch between analytic and numerical IK
+        self.use_numerical_ik = False   # set True to use NumericalIKSolver
+
+        if self.use_numerical_ik:
+            self.ik_solver = NumericalIKSolver(
+                self.robot,
+                max_iters=80,
+                tol_pos=1e-3,
+                tol_step=1e-4,
+                damping=1e-3,
+                position_only=True,   # we only care about (x, y, z) in this CW
+            )
+        else:
+            self.ik_solver = None  # not needed when using analytic IK
 
         # -------------------------------------------------
         # Small floor table definition (used as "floor")
@@ -153,6 +172,21 @@ class ShelfStackingSimulation:
         #add legend
         self.ax.legend(loc="upper left")
 
+        # -------------------------------------------------
+        # Debug / legend text boxes for IK vs FK positions
+        # -------------------------------------------------
+        self.text_goal_fk = self.ax.text2D(
+            0.8, 0.5 ,"", transform=self.ax.transAxes,
+            fontsize=8,
+            bbox=dict(boxstyle="round", fc="white", alpha=0.7)
+        )
+
+        self.text_ik_check = self.ax.text2D(
+            0.8, 1.0, "", transform=self.ax.transAxes,
+            fontsize=8,
+            bbox=dict(boxstyle="round", fc="white", alpha=0.7)
+        )
+
         # Path storage for EE trail
         self.ee_traj_x = []
         self.ee_traj_y = []
@@ -190,6 +224,80 @@ class ShelfStackingSimulation:
     # -----------------------------------------------------
     # Core robot animation utilities
     # -----------------------------------------------------
+    # -----------------------------------------------------
+    # IK / FK debug legend update
+    # -----------------------------------------------------
+    def update_ik_legends(self,
+                          target_pos: np.ndarray,
+                          q_sol: np.ndarray,
+                          success: bool):
+        """
+        Update the two text boxes showing:
+        - Goal position and FK(q_sol)
+        - IK status and position error
+        """
+        target_pos = np.asarray(target_pos, dtype=float).reshape(3)
+        q_sol = np.asarray(q_sol, dtype=float).flatten()
+
+        # Forward kinematics from the solution
+        ee_pos = self.robot.end_effector_position(q_sol)
+        error_vec = target_pos - ee_pos
+        err_norm = float(np.linalg.norm(error_vec))
+
+        # Left box: goal and FK position
+        left_text = (
+            "Goal position (m):\n"
+            f"x: {target_pos[0]: .3f}\n"
+            f"y: {target_pos[1]: .3f}\n"
+            f"z: {target_pos[2]: .3f}\n"
+            "\n"
+            "FK(q) (m):\n"
+            f"x: {ee_pos[0]: .3f}\n"
+            f"y: {ee_pos[1]: .3f}\n"
+            f"z: {ee_pos[2]: .3f}"
+        )
+        self.text_goal_fk.set_text(left_text)
+
+        # Right box: IK check
+        right_text = (
+            "IK check:\n"
+            f"success: {success}\n"
+            f"‖goal - FK(q)‖: {err_norm: .4f} m"
+        )
+        self.text_ik_check.set_text(right_text)
+
+    # -----------------------------------------------------
+    # IK helper: chooses analytic or numerical method
+    # -----------------------------------------------------
+    def solve_ik(self, target_pos: np.ndarray, elbow_up: bool = True):
+        """
+        Solve IK for a given target position using either:
+        - analytic IK (robot.ik_position), or
+        - numerical IK (NumericalIKSolver), depending on self.use_numerical_ik.
+        """
+        target_pos = np.asarray(target_pos, dtype=float).reshape(3)
+
+        if self.use_numerical_ik:
+            # Use current configuration as initial guess for continuity
+            q_init = self.q_current.copy()
+            q_sol, success = self.ik_solver.solve(
+                target_pos=target_pos,
+                target_rot=None,    # position-only mode
+                q_init=q_init,
+            )
+        else:
+            # Analytic IK of RTSS5Robot (position-only)
+            # desired_yaw=None, elbow_up flag is passed on
+            q_sol, success = self.robot.ik_position(
+                target_pos,
+                desired_yaw=None,
+                elbow_up=elbow_up,
+            )
+
+        # Update debug legends with the result
+        self.update_ik_legends(target_pos, q_sol, success)
+        return q_sol, success
+
     def update_robot_plot(self):
         joints, _ = self.robot.forward_kinematics(self.q_current)
         xs = [p[0] for p in joints]
@@ -245,7 +353,7 @@ class ShelfStackingSimulation:
         floor_pos = self.floor_positions[idx]
         shelf_pos = self.shelf_positions[idx]
 
-        # Pre-pick: move above floor target
+        # Pre-pick: move above floor target (or table target)
         pre_pick = floor_pos.copy()
         pre_pick[2] += 0.10
 
@@ -253,16 +361,15 @@ class ShelfStackingSimulation:
         pre_place = shelf_pos.copy()
         pre_place[2] += 0.10
 
-        # 1) Move from home to pre-pick
-        q_pre_pick, ok1 = self.robot.ik_position(pre_pick)
+        # 1) Move from current pose to pre-pick
+        q_pre_pick, ok1 = self.solve_ik(pre_pick, elbow_up=True)
         if not ok1:
             print(f"[WARN] Pre-pick pose unreachable for object {idx}")
             return
-
         self.move_joint_trajectory(self.q_current, q_pre_pick, steps=60)
 
         # 2) Move down to pick
-        q_pick, ok2 = self.robot.ik_position(floor_pos)
+        q_pick, ok2 = self.solve_ik(floor_pos, elbow_up=True)
         if not ok2:
             print(f"[WARN] Pick pose unreachable for object {idx}")
             return
@@ -273,18 +380,22 @@ class ShelfStackingSimulation:
         self._update_attached_objects()
 
         # 3) Lift back to pre-pick
-        self.move_joint_trajectory(self.q_current, q_pre_pick, steps=40)
+        q_pre_pick_up, ok3 = self.solve_ik(pre_pick, elbow_up=True)
+        if not ok3:
+            print(f"[WARN] Pre-pick-up pose unreachable for object {idx}")
+            return
+        self.move_joint_trajectory(self.q_current, q_pre_pick_up, steps=40)
 
         # 4) Move to pre-place
-        q_pre_place, ok3 = self.robot.ik_position(pre_place)
-        if not ok3:
+        q_pre_place, ok4 = self.solve_ik(pre_place, elbow_up=True)
+        if not ok4:
             print(f"[WARN] Pre-place pose unreachable for object {idx}")
             return
         self.move_joint_trajectory(self.q_current, q_pre_place, steps=60)
 
         # 5) Move down to place
-        q_place, ok4 = self.robot.ik_position(shelf_pos)
-        if not ok4:
+        q_place, ok5 = self.solve_ik(shelf_pos, elbow_up=True)
+        if not ok5:
             print(f"[WARN] Place pose unreachable for object {idx}")
             return
         self.move_joint_trajectory(self.q_current, q_place, steps=40)
@@ -295,7 +406,10 @@ class ShelfStackingSimulation:
         self.objects[idx]["done"] = True
 
         # 6) Return to pre-place, then home
-        self.move_joint_trajectory(self.q_current, q_pre_place, steps=40)
+        q_pre_place_exit, ok6 = self.solve_ik(pre_place, elbow_up=True)
+        if ok6:
+            self.move_joint_trajectory(self.q_current, q_pre_place_exit, steps=40)
+
         self.move_joint_trajectory(self.q_current, self.q_home, steps=60)
 
     # -----------------------------------------------------

@@ -220,12 +220,13 @@ class RTSS5Robot:
         # atan2(0, r) = 0
         q3 = 0.0 - np.arctan2(k2, k1)
 
-        # Wrist tilt
-        if desired_yaw is None: #interpret desired_yaw as a desired pitch/tilt angle about X
+        # Wrist (q5): orientation is not used for position IK in this coursework.
+        if desired_yaw is None:
             q5 = 0.0
         else:
-            # Simple model: global yaw approx q1 + q3 + q4 + q5
+            # Simple approximate orientation control if needed.
             q5 = desired_yaw - (q1 + q3 + q4)
+
 
         q = np.array([q1, q2, q3, q4, q5], dtype=float)
 
