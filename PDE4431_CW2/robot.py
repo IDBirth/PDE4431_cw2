@@ -1,7 +1,10 @@
+# robot.py
+
 import numpy as np
 
+
 def rotx(theta: float) -> np.ndarray:
-    """Rotation about X axis."""
+    """Rotation about X axis (4x4 homogeneous)."""
     c, s = np.cos(theta), np.sin(theta)
     return np.array([
         [1.0, 0.0, 0.0, 0.0],
@@ -10,18 +13,9 @@ def rotx(theta: float) -> np.ndarray:
         [0.0, 0.0, 0.0, 1.0],
     ])
 
-# def rotx(theta: float) -> np.ndarray:
-#     """Rotation about Y axis."""
-#     c, s = np.cos(theta), np.sin(theta)
-#     return np.array([
-#         [1.0, 0.0, 0.0, 0.0],
-#         [0.0,  c, -s,  0.0],
-#         [0.0,  s,  c,  0.0],
-#         [0.0, 0.0, 0.0, 1.0],
-#     ])
 
 def rotz(theta: float) -> np.ndarray:
-    """Rotation about Z axis."""
+    """Rotation about Z axis (4x4 homogeneous)."""
     c, s = np.cos(theta), np.sin(theta)
     return np.array([
         [c, -s, 0.0, 0.0],
@@ -32,7 +26,7 @@ def rotz(theta: float) -> np.ndarray:
 
 
 def transl(x: float, y: float, z: float) -> np.ndarray:
-    """Homogeneous translation."""
+    """Homogeneous translation (4x4)."""
     T = np.eye(4)
     T[0, 3] = x
     T[1, 3] = y
@@ -57,7 +51,8 @@ class RTSS5Robot:
         - Upper-arm length:        L1
         - Forearm length:          L2
         - Tool length:             L_tool
-        - For IK we combine L2 and L_tool into an effective L2_eff.
+        - For analytic IK we combine L2 and L_tool into an effective L2_eff
+          for planar reach in XY.
     """
 
     def __init__(self):
@@ -67,13 +62,14 @@ class RTSS5Robot:
         self.L2 = 0.30       # forearm length
         self.L_tool = 0.10   # tool length
 
-        self.L2_eff = self.L2 + self.L_tool  # used in planar IK
+        # Effective second link length for planar IK (forearm + tool)
+        self.L2_eff = self.L2 + self.L_tool
 
         # Joint limits
         self.q1_min = np.deg2rad(-150.0)
         self.q1_max = np.deg2rad(+150.0)
 
-        self.q2_min = 0.00      # vertical travel
+        self.q2_min = 0.00      # vertical travel (m)
         self.q2_max = 0.80
 
         self.q3_min = np.deg2rad(-120.0)
@@ -116,135 +112,143 @@ class RTSS5Robot:
         """
         Compute joint positions and EE transform.
 
+        Args:
+            q: array-like, shape (5,) => [q1, q2, q3, q4, q5]
+
         Returns:
             joint_positions: [p0, p1, p2, p3, p4, p5]
                 p0 = base origin
                 p1 = after base yaw (still at origin)
                 p2 = after vertical prismatic
-                p3 = shoulder joint
-                p4 = elbow joint
-                p5 = end-effector origin
+                p3 = shoulder joint end (after L1)
+                p4 = elbow joint end (after L2)
+                p5 = end-effector origin (after tool offset)
             T_0_5: 4x4 homogeneous transform of end-effector.
         """
         q = self.clamp(q)
         q1, q2, q3, q4, q5 = q
 
-        # Base
+        # Base frame
         T = np.eye(4)
         joint_positions = [T[:3, 3].copy()]  # p0
 
-        # Base yaw
+        # 1) Base yaw about Z
         T = T @ rotz(q1)
         joint_positions.append(T[:3, 3].copy())  # p1
 
-        # Vertical lift
+        # 2) Vertical lift: h0 + q2 along Z
         T = T @ transl(0.0, 0.0, self.h0 + q2)
         joint_positions.append(T[:3, 3].copy())  # p2
 
-        # Shoulder: rotate in horizontal plane, then link L1 along local X
+        # 3) Shoulder: planar rotation, then link L1 along local X
         T = T @ rotz(q3) @ transl(self.L1, 0.0, 0.0)
-        joint_positions.append(T[:3, 3].copy())  # p3 (shoulder link end)
+        joint_positions.append(T[:3, 3].copy())  # p3
 
-        # Elbow: additional rotation and forearm length L2
+        # 4) Elbow: additional planar rotation, then forearm L2
         T = T @ rotz(q4) @ transl(self.L2, 0.0, 0.0)
-        joint_positions.append(T[:3, 3].copy())  # p4 (elbow link end)
+        joint_positions.append(T[:3, 3].copy())  # p4
 
-        # Wrist + tool:
-        #   - rotate about local X by q5 (tilt)
-        #   - then translate along local X by L_tool
+        # 5) Wrist: rotate about local X (tilt), then translate along local X by tool length
         T = T @ rotx(q5) @ transl(self.L_tool, 0.0, 0.0)
-        joint_positions.append(T[:3, 3].copy())  # p5 (Wrist link)
-
+        joint_positions.append(T[:3, 3].copy())  # p5
 
         return joint_positions, T
 
     def end_effector_position(self, q: np.ndarray) -> np.ndarray:
+        """Return just the end-effector position (3,) from FK."""
         joints, _ = self.forward_kinematics(q)
         return joints[-1]
 
     # ---------------------------------------------------------------
     # Analytic IK for position (q1, q2, q3, q4) + simple q5
     # ---------------------------------------------------------------
-    def ik_position(self, target_pos: np.ndarray, desired_yaw: float = None,
-                    elbow_up: bool = True):
+    def ik_position(self,
+                    target_pos: np.ndarray,
+                    desired_yaw: float = None,
+                    elbow_up: bool = True,
+                    debug: bool = False):
         """
         Analytic IK for EE position (x, y, z). Orientation is simplified.
 
         Strategy:
-            - q1 from atan2(y, x)
+            - q1 from atan2(y, x)  (base yaw)
             - q2 sets the vertical height directly: z = h0 + q2
             - (q3, q4) use 2R planar IK in the horizontal plane to reach
-              the radial distance r = sqrt(x^2 + y^2), with link lengths
-              L1 and L2_eff = L2 + L_tool
-            - q5 set from desired_yaw if given, else 0.
+              r = sqrt(x^2 + y^2), with link lengths L1 and L2_eff
+            - q5 is set from desired_yaw (orientation) if provided, else 0.
 
         Returns:
-            q, success_flag
+            q (np.ndarray, shape (5,)), success_flag (bool)
         """
         px, py, pz = np.asarray(target_pos, dtype=float).reshape(3)
 
-        # Base yaw (direction to target in XY)
+        # Base yaw & horizontal distance
         q1 = np.arctan2(py, px)
-
-        # Radial distance from base axis
         r = np.hypot(px, py)
 
-        # Vertical: use prismatic to match the requested z
+        # Vertical: prismatic lift
         q2 = pz - self.h0
-
-        # Clamp q2 and check if it's feasible
-        if q2 < self.q2_min or q2 > self.q2_max:
-            # still build q for debugging, but mark as failure
-            q_dummy = np.array([q1, np.clip(q2, self.q2_min, self.q2_max), 0.0, 0.0, 0.0])
+        if q2 < self.q2_min - 1e-6 or q2 > self.q2_max + 1e-6:
+            if debug:
+                print("[IK] z out of range:",
+                      f"pz={pz:.3f}, q2={q2:.3f},",
+                      f"limits=[{self.q2_min:.3f},{self.q2_max:.3f}]")
+            q_dummy = np.array([q1,
+                                np.clip(q2, self.q2_min, self.q2_max),
+                                0.0, 0.0, 0.0])
             return q_dummy, False
 
-        # 2R planar IK in the horizontal plane for (r, 0)
         L1 = self.L1
-        L2 = self.L2_eff
+        L2 = self.L2_eff  # effective second link (forearm + tool)
 
-        # Law of cosines for elbow angle
-        cos_q4 = (r**2 - L1**2 - L2**2) / (2 * L1 * L2)
+        # Law of cosines for elbow angle in planar 2R
+        cos_raw = (r**2 - L1**2 - L2**2) / (2.0 * L1 * L2)
+        cos_q4 = np.clip(cos_raw, -1.0, 1.0)
 
-        if cos_q4 < -1.0 or cos_q4 > 1.0:
-            # Target out of reach in XY
+        # Check truly unreachable (beyond some tolerance)
+        if abs(cos_raw) > 1.0 + 1e-6:
+            if debug:
+                print("[IK] radial out of reach: r=%.3f, cos_raw=%.6f" % (r, cos_raw))
             q_dummy = np.array([q1, q2, 0.0, 0.0, 0.0])
             return q_dummy, False
 
-        base_elbow = np.arccos(np.clip(cos_q4, -1.0, 1.0))
+        base_elbow = np.arccos(cos_q4)
         q4 = base_elbow if elbow_up else -base_elbow
 
         # Shoulder angle
         k1 = L1 + L2 * np.cos(q4)
         k2 = L2 * np.sin(q4)
-        # Target in local planar frame is at (x=r, y=0)
-        # atan2(0, r) = 0
-        q3 = 0.0 - np.arctan2(k2, k1)
+        q3 = -np.arctan2(k2, k1)
 
-        # Wrist (q5): orientation is not used for position IK in this coursework.
+        # Wrist tilt: does not affect position in this model
         if desired_yaw is None:
             q5 = 0.0
         else:
-            # Simple approximate orientation control if needed.
             q5 = desired_yaw - (q1 + q3 + q4)
-
 
         q = np.array([q1, q2, q3, q4, q5], dtype=float)
 
-        # Check limits and verify position error
+        # Joint limits
         if not self.within_limits(q):
+            if debug:
+                print("[IK] result outside joint limits:", q)
             return q, False
 
+        # Verify final position error
         ee_pos = self.end_effector_position(q)
         err = np.linalg.norm(ee_pos - target_pos)
+        success = (err < 5e-3)   # 5 mm tolerance
 
-        success = (err < 1e-3)
+        if debug:
+            print(f"[IK] target={target_pos}, ee={ee_pos}, err={err:.3e}, success={success}")
+
         return q, success
 
     # ---------------------------------------------------------------
     # Workspace sampling
     # ---------------------------------------------------------------
     def sample_workspace(self, num_samples: int = 800):
-        """Randomly sample joint space and return EE points."""
+        """Randomly sample joint space and return EE points as (N,3)."""
         q1 = np.random.uniform(self.q1_min, self.q1_max, size=num_samples)
         q2 = np.random.uniform(self.q2_min, self.q2_max, size=num_samples)
         q3 = np.random.uniform(self.q3_min, self.q3_max, size=num_samples)

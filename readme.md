@@ -1,54 +1,58 @@
-# RTSS-5 Shelf Stacking Manipulator (PDE4431 CW2)
+# PDE4431 CW2 — Industrial Manipulator Kinematics
 
-Python implementation of the **RTSS-5** (Rotating Telescopic Shelf-Stacker), a
-5-DOF **R–P–R–R–R** arm that stacks three objects from a tabletop onto three
-front shelves. The project includes analytic IK, an optional numerical IK
-solver, and a Matplotlib-based simulator with simple controls.
+**Student:** Bilal Baslar (M01099599)  
+**Robot:** RTSS-5 (Telescopic SCARA Shelf-Stacker) — 5-DOF **R–P–R–R–R** arm
+that moves three objects from a tabletop “floor” to three shelves at different
+heights using purely simulated kinematics.
 
-## Contents
+## How this meets the Rubric
+
+- Uses at five joints with one prismatic joint: base yaw (R), vertical
+  lift (P), shoulder (R), elbow (R), wrist pitch (R).
+- Denavit–Hartenberg parameters defined for each joint; PLUS analytic FK/IK validate
+  reachability, with optional numerical IK (damped least squares).
+- Simulation demonstrates all four required positions: three floor pickups on a
+  table surface and three shelf placements at increasing heights and a fixed
+  radius; workspace scatter plot confirms coverage.
+- Matplotlib GUI animates the full pick-and-place sequence; objects attach to
+  the end-effector, detach on shelves, and a trail shows the EE path. Buttons
+  allow auto-run, workspace plotting, and reset.
+- Extensibility for distinction criteria: inverse kinematics is implemented
+  both analytically and numerically; joint limits, DH info overlay, and error
+  reporting show validation beyond the minimum.
+
+## Robot model and DH parameters
+
+- Geometry (m): base offset `h0=0.20`, upper arm `L1=0.35`, forearm `L2=0.30`,
+  tool `L_tool=0.10` (`L2_eff = L2 + L_tool` for planar IK).
+- Current DH table (drawn in the sim overlay):
+  - J1: a=0.00, α=0°,   d=h0,   θ=q1
+  - J2: a=0.00, α=0°,   d=q2,   θ=0
+  - J3: a=L1,  α=0°,    d=0,    θ=q3
+  - J4: a=L2,  α=0°,    d=0,    θ=q4
+  - J5: a=L_tool, α=0°, d=0,    θ=q5
+
+## Task layout in simulation
+
+- Table-as-floor: center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m, height
+  `0.22` m; three objects along X on the tabletop.
+- Shelves: radius `0.70` m at `θ=30°`; heights `[0.30, 0.55, 0.80]` m; drawn
+  as thin platforms with target markers.
+- Home pose: `[0.0, 0.20, 0.0, 0.0, 0.0]` (yaw, lift, shoulder, elbow, wrist).
+
+## Repository map
 
 - `PDE4431_CW2/robot.py` — RTSS-5 model, FK, analytic position IK, limit checks,
   workspace sampler.
-- `PDE4431_CW2/simulation.py` — pick-and-place simulation, GUI controls,
-  optional numerical IK, visual debugging overlays, shelf/table geometry.
-- `PDE4431_CW2/ik_solver.py` — generic damped-least-squares IK helper
-  (finite-difference Jacobian; position-only by default).
-- `PDE4431_CW2/main.py` — entrypoint to launch the simulator.
-- `rtss5_ik_validation.py` — compares analytic IK vs. numerical IK on random
-  targets.
-- `requirements.txt` — pinned dependencies (NumPy <2 to avoid ABI issues).
+- `PDE4431_CW2/simulation.py` — pick-and-place loop, Matplotlib GUI, DH/IK
+  overlays, workspace plotter.
+- `PDE4431_CW2/ik_solver.py` — damped-least-squares IK (finite-difference
+  Jacobian) for position or pose.
+- `PDE4431_CW2/main.py` — simulator entrypoint.
+- `rtss5_ik_validation.py` — compares analytic vs numerical IK on random targets.
+- `requirements.txt` — dependency pins (NumPy <2 to avoid ABI issues).
 
-## Robot model (RTSS-5)
-
-- Joints: `q1` base yaw (R), `q2` vertical lift (P), `q3` shoulder (R),
-  `q4` elbow (R), `q5` wrist pitch (R).
-- Geometry (m): base offset `h0=0.20`, upper arm `L1=0.35`, forearm `L2=0.30`,
-  tool `L_tool=0.10` (used in IK as `L2_eff = L2 + L_tool`).
-- Analytic IK (position-only): yaw from `atan2(y,x)`, z via `q2`, planar 2R IK
-  for `(q3,q4)`, simple `q5` (zero or to track desired yaw). Limit checks and
-  FK validation ensure feasibility.
-- Numerical IK: toggle in `simulation.py` with `self.use_numerical_ik = True`
-  to use the damped-least-squares solver (`ik_solver.NumericalIKSolver`) with
-  position-only task space.
-
-## Task layout
-
-- Table (acts as floor): center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m,
-  height `0.22` m. Three objects are placed along X on the tabletop.
-- Shelves: radius `0.70` m at `θ=30°`; heights `[0.30, 0.55, 0.80]` m. Each
-  shelf is drawn as a thin platform and has a star marker target; objects carry
-  a `target` pointing to their shelf.
-
-## Simulator features
-
-- Buttons: **Run full sequence** (pick & place all three), **Show workspace**
-  (scatter sampled FK points), **Reset** (home pose and reset objects).
-- IK debug overlays: goal vs. FK(q) and error norm update after each IK call.
-- EE trail, object markers, shelf/table geometry drawn in 3D.
-- Pick/place steps: pre-pick → pick → lift → pre-place → place → exit →
-  home; objects attach/detach to EE accordingly.
-
-## Setup & run
+## Run the simulator
 
 ```bash
 python -m venv .venv
@@ -57,15 +61,29 @@ pip install -r requirements.txt
 python PDE4431_CW2/main.py
 ```
 
-> Note: NumPy is pinned to `<2` because some modules are not yet built against
-> NumPy 2.x. If you see ABI errors, ensure the pinned version is installed.
+- **Run full sequence:** animates pick → place for all three objects.
+- **Show workspace:** scatters sampled FK points to visualise reachable set.
+- **Reset:** return to home pose and reset object states.
+- Toggle `use_numerical_ik` in `PDE4431_CW2/simulation.py` to compare analytic
+  vs numerical IK.
 
-## IK validation script
+## IK validation (text-only)
 
 ```bash
 source .venv/bin/activate
 python rtss5_ik_validation.py
 ```
 
-This reports analytic vs. numerical IK solutions and their FK errors for random
+Reports analytic and numerical IK solutions plus FK error norms for random
 targets.
+
+## Video link (per brief)
+
+- YouTube demo (with commentary): **<add link here>**
+
+## Submission notes
+
+- Coursework: PDE4431 Dubai Coursework 2 — Industrial Manipulator Kinematics
+  Modelling (Dec 11, 2025, 23:59 Dubai time).
+- Upload code to GitHub and add `@judhi` as collaborator as required in the
+  PDF instructions. Include the video link above in the GitHub README.
