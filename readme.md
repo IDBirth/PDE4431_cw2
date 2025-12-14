@@ -113,7 +113,7 @@ targets.
 
 https://youtu.be/gmwFt7yIo8s
 <video src="images/video.mp4" controls width="100%"></video>
-
+![Robot Image](/images/video.mp4)
 
 ## Submission notes
 
