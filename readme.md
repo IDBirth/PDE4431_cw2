@@ -53,6 +53,7 @@ DH parameters:
 | 2      |    P (q₂)  | 0.00   |   0.0    |  0.20 + q₂ (var)  |     0.0      |
 | 3      |    R (q₃)  | 0.35   |   0.0    |       0.00        |     q₃       |
 | 4      |    R (q₄)  | 0.30   |   0.0    |       0.00        |     q₄       |
+| 5      |    R (q⁵)  | 0.30   |   0.0    |       0.00        |     q⁵       |
 
 So the homogeneous transform up to the forearm frame (frame 4) is:
 
