@@ -1,7 +1,7 @@
 # PDE4431 CW2 — Industrial Manipulator Kinematics
 
 **Student:** Bilal Baslar (M01099599)  
-**Robot:** RTSS-5 (Telescopic SCARA Shelf-Stacker) — 5-DOF **R–P–R–R–R** arm
+**Robot:** RTSS-5 (Rotating Telescopic Shelf-Stacker) like a Telescopic SCARA robot — 5-DOF **R–P–R–R–R** arm
 that moves three objects from a tabletop “floor” to three shelves at different
 heights using purely simulated kinematics.
 
@@ -85,5 +85,5 @@ targets.
 
 - Coursework: PDE4431 Dubai Coursework 2 — Industrial Manipulator Kinematics
   Modelling (Dec 11, 2025, 23:59 Dubai time).
-- Upload code to GitHub and add `@judhi` as collaborator as required in the
-  PDF instructions. Include the video link above in the GitHub README.
+- Uploaded code to GitHub and added `@judhi` as collaborator as required in the
+  PDF instructions. Include the video link above.
