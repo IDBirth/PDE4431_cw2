@@ -53,11 +53,12 @@ DH parameters:
 | 2      |    P (q₂)  | 0.00   |   0.0    |  0.20 + q₂ (var)  |     0.0      |
 | 3      |    R (q₃)  | 0.35   |   0.0    |       0.00        |     q₃       |
 | 4      |    R (q₄)  | 0.30   |   0.0    |       0.00        |     q₄       |
-| 5      |    R (q⁵)  | 0.30   |   0.0    |       0.00        |     q⁵       |
+| 5      |    R (q⁵)  | 0.10   |   0.0    |       0.00        |     q⁵       |
 
 So the homogeneous transform up to the forearm frame (frame 4) is:
 
-T₀⁴ = T₀¹ · T₁² · T₂³ · T₃⁴
+T₀⁵(q) = T₀⁴(q₁, q₂, q₃, q₄) · T₄⁵(q₅)
+       = T₀¹ · T₁² · T₂³ · T₃⁴ · T₄⁵
 
 ![Robot Image](/images/Robot.png)
 
