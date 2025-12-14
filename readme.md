@@ -23,21 +23,47 @@ heights using purely simulated kinematics.
 
 ## Robot model and DH parameters
 
-- Geometry (m): base offset `h0=0.20`, upper arm `L1=0.35`, forearm `L2=0.30`,
-  tool `L_tool=0.10` (`L2_eff = L2 + L_tool` for planar IK).
-- Current DH table (drawn in the sim overlay):
-  - J1: a=0.00, α=0°,   d=h0,   θ=q1
-  - J2: a=0.00, α=0°,   d=q2,   θ=0
-  - J3: a=L1,  α=0°,    d=0,    θ=q3
-  - J4: a=L2,  α=0°,    d=0,    θ=q4
-  - J5: a=L_tool, α=0°, d=0,    θ=q5
+- **q₁** – Base yaw (revolute, about global Z)
+- **q₂** – Vertical lift (prismatic, along global Z)
+- **q₃** – Shoulder (revolute, about local Z)
+- **q₄** – Elbow   (revolute, about local Z)
+- **q₅** – Wrist pitch (revolute, about local X at the tool)
 
+Link geometry (all in metres):
+
+- Base offset:      h₀   = 0.20 m
+- Upper arm length: L₁   = 0.35 m
+- Forearm length:   L₂   = 0.30 m
+- Tool length:      L_tool = 0.10 m
+
+---
+
+### Standard DH Table (Frames 0 → 4)
+
+Using Craig’s standard DH convention:
+
+Tᵢ⁽ⁱ⁺¹⁾ = Rot_z(θᵢ) · Trans_z(dᵢ) · Trans_x(aᵢ) · Rot_x(αᵢ)
+
+With the RTSS-5 geometry, the first four joints map to the following
+DH parameters:
+
+| Link i | Joint type | aᵢ [m] | αᵢ [deg] |      dᵢ [m]       |   θᵢ [deg]   |
+|--------|-----------:|:------:|:--------:|:-----------------:|:------------:|
+| 1      |    R (q₁)  | 0.00   |   0.0    |       0.00        |     q₁       |
+| 2      |    P (q₂)  | 0.00   |   0.0    |  0.20 + q₂ (var)  |     0.0      |
+| 3      |    R (q₃)  | 0.35   |   0.0    |       0.00        |     q₃       |
+| 4      |    R (q₄)  | 0.30   |   0.0    |       0.00        |     q₄       |
+
+So the homogeneous transform up to the forearm frame (frame 4) is:
+
+T₀⁴ = T₀¹ · T₁² · T₂³ · T₃⁴
 ## Task layout in simulation
 
-- Table-as-floor: center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m, height
-  `0.22` m; three objects along X on the tabletop.
-- Shelves: radius `0.70` m at `θ=30°`; heights `[0.30, 0.55, 0.80]` m; drawn
-  as thin platforms with target markers.
+- Table-as-floor: center `(0.0, -0.30, 0.0)`, size `0.4 × 0.4` m, height `0.22` m; 
+  three objects along X on the tabletop.
+- Shelves: radius `0.70` m at `θ=30°`; 
+  heights `[0.30, 0.55, 0.80]` m; 
+  drawn as thin platforms with target markers.
 - Home pose: `[0.0, 0.20, 0.0, 0.0, 0.0]` (yaw, lift, shoulder, elbow, wrist).
 
 ## Repository map
